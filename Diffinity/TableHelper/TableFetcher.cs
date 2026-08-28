@@ -27,11 +27,16 @@ SELECT
     END AS isPrimaryKey,
     CASE 
         WHEN fk.parent_column_id IS NOT NULL THEN 'YES' ELSE 'NO' 
-    END AS isForeignKey
+    END AS isForeignKey,
+    CASE WHEN c.is_identity = 1 THEN 'YES' ELSE 'NO' END AS isIdentity,
+    CONVERT(nvarchar(100), ic.seed_value) AS identitySeed,
+    CONVERT(nvarchar(100), ic.increment_value) AS identityIncrement
     FROM sys.columns c
     JOIN sys.tables t ON c.object_id = t.object_id
     JOIN sys.schemas s ON t.schema_id = s.schema_id
     JOIN sys.types ty ON c.user_type_id = ty.user_type_id
+    LEFT JOIN sys.identity_columns ic
+        ON c.object_id = ic.object_id AND c.column_id = ic.column_id
     LEFT JOIN (
         SELECT i.object_id, ic.column_id
         FROM sys.indexes i
@@ -148,6 +153,9 @@ public class tableDto
     public string maxLength { get; set; }
     public string isPrimaryKey { get; set; }
     public string isForeignKey { get; set; }
+    public string isIdentity { get; set; }
+    public string identitySeed { get; set; }
+    public string identityIncrement { get; set; }
 }
 
 public class ForeignKeyDto

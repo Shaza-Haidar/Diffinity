@@ -2309,9 +2309,12 @@ public static class HtmlReportWriter
         {
             var c = cols[i];
             var len = NormalizeLen(c.columnType, c.maxLength);
+            var identity = c.isIdentity?.Equals("YES", StringComparison.OrdinalIgnoreCase) == true
+                ? $" IDENTITY({c.identitySeed ?? "1"},{c.identityIncrement ?? "1"})"
+                : "";
             var nullability = (c.isNullable?.Equals("YES", StringComparison.OrdinalIgnoreCase) == true) ? "NULL" : "NOT NULL";
             var comma = (i < cols.Count - 1) ? "," : "";
-            sb.AppendLine($"    [{c.columnName}] {c.columnType}{len} {nullability}{comma}");
+            sb.AppendLine($"    [{c.columnName}] {c.columnType}{len}{identity} {nullability}{comma}");
         }
 
         // Add PK constraint

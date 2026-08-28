@@ -182,6 +182,9 @@ public class DbComparer : DbObjectHandler
     }
     public static string CompareOneVsAll(DbServer sourceServer, DbServer[] targetServers, int threadCount = 4, ComparerAction makeChange = ComparerAction.DoNotApplyChanges, DbObjectFilter filter = DbObjectFilter.HideUnchanged, Run run = Run.All)
     {
+        if (targetServers.Length == 0)
+            throw new ArgumentException("At least one target server is required.", nameof(targetServers));
+
         var sw = Stopwatch.StartNew();
         string timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
         string rootFolder = $"{sourceServer.name}_vs_all_{timestamp}";
@@ -267,7 +270,61 @@ public class DbComparer : DbObjectHandler
             destinationReports,
             ignoredObjects.Any() ? ignoredReport.path : null);
     }
-    public static summaryReportDto CompareProcs(DbServer sourceServer, DbServer destinationServer, string outputFolder, ComparerAction makeChange, DbObjectFilter filter, Run run, HashSet<string> ignoredObjects, Dictionary<string, List<string>> objectTags, Dictionary<string, string> tagColors, int threadCount, string? overrideReturnPage = null)
+    /// <summary>
+    /// Compares one schema-qualified stored procedure from the source server against every target server.
+    /// </summary>
+    public static string CompareOneProcVsAll(DbServer sourceServer, DbServer targetServer, string procedureName)
+    {
+        return CompareOneProcVsAll(sourceServer, new[] { targetServer }, procedureName);
+    }
+    public static string CompareOneProcVsAll(DbServer sourceServer, DbServer[] targetServers, string procedureName, int threadCount = 4, ComparerAction makeChange = ComparerAction.DoNotApplyChanges, DbObjectFilter filter = DbObjectFilter.HideUnchanged)
+    {
+        if (targetServers.Length == 0)
+            throw new ArgumentException("At least one target server is required.", nameof(targetServers));
+        if (string.IsNullOrWhiteSpace(procedureName))
+            throw new ArgumentException("A schema-qualified procedure name is required.", nameof(procedureName));
+
+        return CompareOneProcedureVsAll(sourceServer, targetServers, procedureName, threadCount, makeChange, filter);
+    }
+    private static string CompareOneProcedureVsAll(DbServer sourceServer, DbServer[] targetServers, string procedureName, int threadCount, ComparerAction makeChange, DbObjectFilter filter)
+    {
+        var sw = Stopwatch.StartNew();
+        string timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+        string rootFolder = $"{sourceServer.name}_vs_all_{timestamp}";
+        Directory.CreateDirectory(rootFolder);
+
+        var ignoredObjects = DiffIgnoreLoader.LoadIgnoredObjects();
+        var objectTags = DiffTagsLoader.LoadObjectTags();
+        var tagColors = DiffTagColorsLoader.LoadTagColors();
+        summaryReportDto ignoredReport = !ignoredObjects.Any()? new summaryReportDto(): HtmlReportWriter.WriteIgnoredReport(rootFolder, ignoredObjects, Run.Proc, sourceServer, targetServers[0], $"../{sourceServer.name}_vs_all.html");
+
+        var destinationReports = new List<HtmlReportWriter.DestinationReportData>();
+        var procedureReports = new List<summaryReportDto>();
+
+        foreach (var target in targetServers)
+        {
+            string subFolder = Path.Combine(rootFolder, target.name);
+            Directory.CreateDirectory(subFolder);
+
+            var procReport = CompareProcs(sourceServer, target, subFolder, makeChange, filter, Run.Proc,ignoredObjects, objectTags, tagColors, threadCount,$"../../{sourceServer.name}_vs_all.html", procedureName);
+
+            File.WriteAllText(procReport.fullPath, procReport.html.Replace("{procsCount}", procReport.count));
+            procedureReports.Add(procReport);
+            destinationReports.Add(new HtmlReportWriter.DestinationReportData
+            {
+                ProcIndexPath = $"{target.name}/{procReport.path}",
+                ProcCount = procReport.diffsCount,
+                ProcsCountText = procReport.count
+            });
+        }
+
+        if (ignoredObjects.Any())
+            File.WriteAllText(ignoredReport.fullPath, ignoredReport.html.Replace("{procsCount}", procedureReports.Last().count));
+
+        sw.Stop();
+        return HtmlReportWriter.WriteMultiDestinationIndexSummary(sourceServer,targetServers.ToList(),rootFolder,sw.ElapsedMilliseconds,destinationReports,ignoredObjects.Any() ? ignoredReport.path : null);
+    }
+    public static summaryReportDto CompareProcs(DbServer sourceServer, DbServer destinationServer, string outputFolder, ComparerAction makeChange, DbObjectFilter filter, Run run, HashSet<string> ignoredObjects, Dictionary<string, List<string>> objectTags, Dictionary<string, string> tagColors, int threadCount, string? overrideReturnPage = null, string? procedureName = null)
     {
         ParallelOptions parallelOptions = new() { MaxDegreeOfParallelism = threadCount };
         /// <summary>
@@ -286,6 +343,23 @@ public class DbComparer : DbObjectHandler
 
         // Step 3 - Retrieve procedure names from the source server
         List<(string schema, string name)> procedures = ProcedureFetcher.GetProcedureNames(sourceServer.connectionString).OrderBy(p => p.schema).ThenBy(p => p.name).ToList();
+
+        if (!string.IsNullOrWhiteSpace(procedureName))
+        {
+            var parts = procedureName.Split('.', 2, StringSplitOptions.TrimEntries);
+            if (parts.Length != 2 || parts.Any(string.IsNullOrWhiteSpace))
+                throw new ArgumentException("The procedure name must be schema-qualified (for example patientApp.spGetShortcuts5).", nameof(procedureName));
+
+            string requestedSchema = parts[0].Trim('[', ']');
+            string requestedName = parts[1].Trim('[', ']');
+            procedures = procedures.Where(p =>
+                    string.Equals(p.schema, requestedSchema, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(p.name, requestedName, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            if (procedures.Count == 0)
+                throw new InvalidOperationException($"Stored procedure '{procedureName}' was not found on source server '{sourceServer.name}'.");
+        }
 
         List<dbObjectResult> results = new();
 
