@@ -9,8 +9,13 @@ internal class Program
         var CMH = new DbServer("CMH", Environment.GetEnvironmentVariable("cmhCs"));
         var Albany = new DbServer("Albany", Environment.GetEnvironmentVariable("albanymedcs"));
         var TGH = new DbServer("TGH", Environment.GetEnvironmentVariable("tghcs"));
+        var Dev002 = new DbServer("DEV002", Environment.GetEnvironmentVariable("dev2Cs"));
 
-        string reportPath = DbComparer.CompareOneVsAll(Corewell, TGH);
+        // ---- to compare one stored procedure from one database to all other databases showing unchanged, use the following method
+        string reportPath = DbComparer.CompareOneProcVsAll(Dev002, new[] { Albany, TGH, CMH }, "patientApp.spGetShortcuts5", filter: DbObjectFilter.ShowUnchanged);
+
+        // ---- to compare one database to all other databases, use the following method:
+        // string reportPath = DbComparer.CompareOneVsAll(CMH, Albany, TGH, Dev002);
 
         //=== To show unchanged objects in the report ===
         //string reportPath = DbComparer.CompareOneVsAll(Corewell, new[] { CMH, DEV002, alb }, filter: DbObjectFilter.ShowUnchanged);

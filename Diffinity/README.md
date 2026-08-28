@@ -73,6 +73,35 @@ internal class Program
 ```
 The HTML report is generated in the `Diffinity-output` folder by default.
 
+To compare one source database against any number of target databases:
+
+```csharp
+string reportPath = DbComparer.CompareOneVsAll(
+    CMH,
+    Albany,
+    TGH,
+    Dev002);
+```
+
+To compare only one stored procedure against a target database, pass its schema-qualified name:
+
+```csharp
+string reportPath = DbComparer.CompareOneProcVsAll(
+    Dev002,
+    Dev002,
+    "patientApp.spGetShortcuts5");
+```
+
+For multiple targets or advanced options, pass the targets as an array and use `procedureName`:
+
+```csharp
+string reportPath = DbComparer.CompareOneProcVsAll(
+    Dev002,
+    new[] { CMH, Albany, Dev002 },
+    "patientApp.spGetShortcuts5",
+    filter: DbObjectFilter.HideUnchanged);
+```
+
 ## API Overview
 
 The `Diffinity.Compare` method accepts the following parameters:
