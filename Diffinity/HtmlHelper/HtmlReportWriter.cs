@@ -689,7 +689,7 @@ public static class HtmlReportWriter
        <html>
        <head>
        <meta charset='utf-8' />
-       <title>Diffinity Report</title>
+       <title>{title}</title>
        <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -1816,6 +1816,19 @@ public static class HtmlReportWriter
     /// </summary>
     public static void DifferencesWriter(string differencesPath, string sourceName, string destinationName, string sourceBody, string destinationBody, string title, string Name, string returnPage)
     {
+        string html = RenderDifferencesHtml(sourceName, destinationName, sourceBody, destinationBody, title, Name, returnPage);
+        File.WriteAllText(differencesPath, html);
+    }
+
+    /// <summary>
+    /// Generates the existing side-by-side HTML diff page entirely in memory.
+    /// </summary>
+    public static string RenderDifferencesHtml(string sourceName, string destinationName, string sourceBody, string destinationBody, string title, string Name, string? returnPage = null)
+    {
+        string safeTitle = WebUtility.HtmlEncode(title);
+        string safeName = WebUtility.HtmlEncode(Name);
+        string safeSourceName = WebUtility.HtmlEncode(sourceName);
+        string safeDestinationName = WebUtility.HtmlEncode(destinationName);
         var differ = new Differ();
         string[] sourceBodyColored = NoBlanks(HighlightSql(sourceBody));
         string[] destinationBodyColored = NoBlanks(HighlightSql(destinationBody));
@@ -1823,14 +1836,14 @@ public static class HtmlReportWriter
         var model = sideBySideBuilder.BuildDiffModel(string.Join("\n", destinationBodyColored), string.Join("\n", sourceBodyColored));
 
         var html = new StringBuilder();
-        html.AppendLine(DifferencesTemplate.Replace("{title}", title));
+        html.AppendLine(DifferencesTemplate.Replace("{title}", safeTitle));
 
         // Source block
-        html.AppendLine(@$"<h1>{Name}<button class=""name-copy-btn"" onclick=""copyName(this)"">{SmallCopyIcon}{SmallCheckIcon}</button><span class=""copy-target"" style=""display:none;"">{Name}</span></h1>
+        html.AppendLine(@$"<h1>{safeName}<button class=""name-copy-btn"" onclick=""copyName(this)"">{SmallCopyIcon}{SmallCheckIcon}</button><span class=""copy-target"" style=""display:none;"">{safeName}</span></h1>
                          <div class='diff-wrapper'>
                         <div class='pane'>
                         <button class='copy-btn' data-target='left'>{CopyIcon}{CheckIcon}</button>   
-                        <h2>{sourceName}</h2>
+                        <h2>{safeSourceName}</h2>
                         <div class='code-scroll' id='left'><div class='code-block'>
 
 ");
@@ -1845,7 +1858,7 @@ public static class HtmlReportWriter
         html.Append($@"</div></div></div>
                         <div class='pane'>
                         <button class='copy-btn' data-target='right'>{CopyIcon}{CheckIcon}</button>                        
-                        <h2>{destinationName}</h2>
+                        <h2>{safeDestinationName}</h2>
                         <div class='code-scroll' id='right'><div class='code-block'>
                         ");
         foreach (var line in model.OldText.Lines)
@@ -1857,8 +1870,12 @@ public static class HtmlReportWriter
         }
 
         // Scroll sync script
+        string returnLink = string.IsNullOrWhiteSpace(returnPage)
+            ? string.Empty
+            : $@"<a href=""{WebUtility.HtmlEncode(returnPage)}"" class=""return-btn"">Return to Summary</a>";
+
         html.AppendLine(@$"</div></div></div></div><br>
-                 <a href=""{returnPage}"" class=""return-btn"">Return to Summary</a>
+                 {returnLink}
               
                 <script>
                 function copyName(button) {{
@@ -1917,7 +1934,6 @@ public static class HtmlReportWriter
 
                  </body>
                  </html>");
-        File.WriteAllText(differencesPath, html.ToString());
 
         #region local functions
         string[] NoBlanks(string s)
@@ -1934,6 +1950,8 @@ public static class HtmlReportWriter
             return s.Split('\n');
         }
         #endregion
+
+        return html.ToString();
     }
 
     /// <summary>
