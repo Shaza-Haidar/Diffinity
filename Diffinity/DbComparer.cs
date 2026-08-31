@@ -6,6 +6,7 @@ using Diffinity.ViewHelper;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using System.Diagnostics;
+using System.Text;
 using System.Text.RegularExpressions;
 using static Diffinity.DbComparer;
 using Diffinity.FunctionHelper;
@@ -286,6 +287,40 @@ public class DbComparer : DbObjectHandler
 
         return CompareOneProcedureVsAll(sourceServer, targetServers, procedureName, threadCount, makeChange, filter);
     }
+
+    /// <summary>
+    /// Compares one schema-qualified stored procedure and returns only the official Diffinity
+    /// side-by-side comparison page as UTF-8 bytes. No files or directories are created.
+    /// </summary>
+    public static byte[] CompareProcedureToHtml(DbServer sourceServer, DbServer destinationServer, string procedureName)
+    {
+        ArgumentNullException.ThrowIfNull(sourceServer);
+        ArgumentNullException.ThrowIfNull(destinationServer);
+
+        (string schema, string name) = ParseSchemaQualifiedName(procedureName);
+        (string sourceBody, string destinationBody) = ProcedureFetcher.GetProcedureBody(sourceServer.connectionString, destinationServer.connectionString, schema, name);
+
+        string html = HtmlReportWriter.RenderDifferencesHtml(sourceServer.name, destinationServer.name, sourceBody, destinationBody, "Differences", $"{schema}.{name}");
+
+        return Encoding.UTF8.GetBytes(html);
+    }
+
+    private static (string Schema, string Name) ParseSchemaQualifiedName(string procedureName)
+    {
+        if (string.IsNullOrWhiteSpace(procedureName)) throw InvalidProcedureName();
+
+        string[] parts = procedureName.Split('.', 2, StringSplitOptions.TrimEntries);
+        if (parts.Length != 2 || parts.Any(string.IsNullOrWhiteSpace)) throw InvalidProcedureName();
+
+        string schema = parts[0].Trim('[', ']');
+        string name = parts[1].Trim('[', ']');
+        if (string.IsNullOrWhiteSpace(schema) || string.IsNullOrWhiteSpace(name)) throw InvalidProcedureName();
+
+        return (schema, name);
+    }
+
+    private static ArgumentException InvalidProcedureName() => new("The procedure name must be schema-qualified (for example dbo.MyProcedure).", "procedureName");
+
     private static string CompareOneProcedureVsAll(DbServer sourceServer, DbServer[] targetServers, string procedureName, int threadCount, ComparerAction makeChange, DbObjectFilter filter)
     {
         var sw = Stopwatch.StartNew();
