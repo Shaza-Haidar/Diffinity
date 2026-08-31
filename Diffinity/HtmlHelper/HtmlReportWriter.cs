@@ -1816,6 +1816,15 @@ public static class HtmlReportWriter
     /// </summary>
     public static void DifferencesWriter(string differencesPath, string sourceName, string destinationName, string sourceBody, string destinationBody, string title, string Name, string returnPage)
     {
+        string html = RenderDifferencesHtml(sourceName, destinationName, sourceBody, destinationBody, title, Name, returnPage);
+        File.WriteAllText(differencesPath, html);
+    }
+
+    /// <summary>
+    /// Generates the existing side-by-side HTML diff page entirely in memory.
+    /// </summary>
+    public static string RenderDifferencesHtml(string sourceName, string destinationName, string sourceBody, string destinationBody, string title, string Name, string? returnPage = null)
+    {
         var differ = new Differ();
         string[] sourceBodyColored = NoBlanks(HighlightSql(sourceBody));
         string[] destinationBodyColored = NoBlanks(HighlightSql(destinationBody));
@@ -1823,7 +1832,7 @@ public static class HtmlReportWriter
         var model = sideBySideBuilder.BuildDiffModel(string.Join("\n", destinationBodyColored), string.Join("\n", sourceBodyColored));
 
         var html = new StringBuilder();
-        html.AppendLine(DifferencesTemplate.Replace("{title}", title));
+        html.AppendLine(DifferencesTemplate);
 
         // Source block
         html.AppendLine(@$"<h1>{Name}<button class=""name-copy-btn"" onclick=""copyName(this)"">{SmallCopyIcon}{SmallCheckIcon}</button><span class=""copy-target"" style=""display:none;"">{Name}</span></h1>
@@ -1857,8 +1866,12 @@ public static class HtmlReportWriter
         }
 
         // Scroll sync script
+        string returnLink = string.IsNullOrWhiteSpace(returnPage)
+            ? string.Empty
+            : $@"<a href=""{returnPage}"" class=""return-btn"">Return to Summary</a>";
+
         html.AppendLine(@$"</div></div></div></div><br>
-                 <a href=""{returnPage}"" class=""return-btn"">Return to Summary</a>
+                 {returnLink}
               
                 <script>
                 function copyName(button) {{
@@ -1917,7 +1930,6 @@ public static class HtmlReportWriter
 
                  </body>
                  </html>");
-        File.WriteAllText(differencesPath, html.ToString());
 
         #region local functions
         string[] NoBlanks(string s)
@@ -1934,6 +1946,8 @@ public static class HtmlReportWriter
             return s.Split('\n');
         }
         #endregion
+
+        return html.ToString();
     }
 
     /// <summary>
